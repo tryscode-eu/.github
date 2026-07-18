@@ -1,0 +1,90 @@
+name: Reusable CI - Candidate image
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Lowercase GHCR image name, without registry, owner, or tag.
+        required: true
+        type: string
+      context:
+        description: Docker build context.
+        required: false
+        type: string
+        default: .
+      dockerfile:
+        description: Dockerfile path.
+        required: false
+        type: string
+        default: ./Dockerfile
+      platforms:
+        description: Comma-separated target platforms.
+        required: false
+        type: string
+        default: linux/amd64
+    outputs:
+      image:
+        description: Immutable candidate image reference, tagged with the caller SHA.
+        value: ${{ jobs.build.outputs.image }}
+      digest:
+        description: Registry digest returned by BuildKit.
+        value: ${{ jobs.build.outputs.digest }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build and publish candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.reference.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Define immutable image reference
+        id: reference
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ inputs.image-name }}
+          OWNER: ${{ github.repository_owner }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]; then
+            echo "image-name must be a lowercase GHCR path" >&2
+            exit 2
+          fi
+          owner="${OWNER,,}"
+          image="ghcr.io/${owner}/${IMAGE_NAME}:${REVISION}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build SHA-tagged candidate
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+          tags: ${{ steps.reference.outputs.image }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
