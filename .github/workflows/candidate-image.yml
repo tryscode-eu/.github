@@ -29,6 +29,9 @@ on:
       digest:
         description: Registry digest returned by BuildKit.
         value: ${{ jobs.build.outputs.digest }}
+      immutable-image:
+        description: Published GHCR reference pinned to the registry digest.
+        value: ${{ jobs.build.outputs.immutable-image }}
 
 permissions:
   contents: read
@@ -42,6 +45,7 @@ jobs:
     outputs:
       image: ${{ steps.reference.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
+      immutable-image: ${{ steps.immutable.outputs.image }}
     steps:
       - name: Check out the caller repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -55,12 +59,15 @@ jobs:
           REVISION: ${{ github.sha }}
         run: |
           set -Eeuo pipefail
+          : "${OWNER:?repository owner is required}"
           if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]; then
             echo "image-name must be a lowercase GHCR path" >&2
             exit 2
           fi
           owner="${OWNER,,}"
-          image="ghcr.io/${owner}/${IMAGE_NAME}:${REVISION}"
+          repository="ghcr.io/${owner}/${IMAGE_NAME}"
+          image="${repository}:${REVISION}"
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -88,3 +95,15 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           provenance: mode=max
           sbom: true
+
+      - name: Export registry-digest reference
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        id: immutable
+        shell: bash
+        env:
+          REPOSITORY: ${{ steps.reference.outputs.repository }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "image=${REPOSITORY}@${DIGEST}" >> "$GITHUB_OUTPUT"

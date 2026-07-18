@@ -1,0 +1,116 @@
+name: Reusable CD - Bounded staging release
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: Dispatcher allowlisted service identifier.
+        required: true
+        type: string
+      image:
+        description: Immutable GHCR reference using an @sha256 digest.
+        required: true
+        type: string
+      deploy-enabled:
+        description: Explicit gate; false validates inputs without contacting staging.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SHERLOCK_HOST:
+        required: false
+      SHERLOCK_PORT:
+        required: false
+      SHERLOCK_USER:
+        required: false
+      SHERLOCK_SSH_PRIVATE_KEY:
+        required: false
+      SHERLOCK_KNOWN_HOSTS:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-${{ github.repository }}-${{ inputs.service-name }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Validate immutable release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Validate bounded public inputs
+        shell: bash
+        env:
+          SERVICE_NAME: ${{ inputs.service-name }}
+          IMAGE: ${{ inputs.image }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$SERVICE_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]
+          [[ "$IMAGE" =~ ^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]]
+          [[ "$REVISION" =~ ^[0-9a-f]{40,64}$ ]]
+
+      - name: Report disabled staging gate
+        if: inputs.deploy-enabled == false
+        run: echo "Staging release is validated but disabled; no remote connection was attempted."
+
+  deploy:
+    name: Release through the forced staging dispatcher
+    if: inputs.deploy-enabled == true
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    env:
+      SERVICE_NAME: ${{ inputs.service-name }}
+      IMAGE: ${{ inputs.image }}
+      REVISION: ${{ github.sha }}
+      SSH_HOST: ${{ secrets.SHERLOCK_HOST }}
+      SSH_PORT: ${{ secrets.SHERLOCK_PORT }}
+      SSH_USER: ${{ secrets.SHERLOCK_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SHERLOCK_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SHERLOCK_KNOWN_HOSTS }}
+    steps:
+      - name: Validate the dedicated SSH destination
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]{1,253}$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]]
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]
+          [[ -n "$SSH_PRIVATE_KEY" ]]
+          [[ -n "$SSH_KNOWN_HOSTS" ]]
+
+      - name: Invoke only the bounded release protocol
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          release_dir="$RUNNER_TEMP/tryscode-staging-release"
+          key_file="$release_dir/id_ed25519"
+          known_hosts_file="$release_dir/known_hosts"
+          cleanup() {
+            rm -rf -- "$release_dir"
+          }
+          trap cleanup EXIT
+          install -d -m 700 -- "$release_dir"
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$key_file"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >"$known_hosts_file"
+          chmod 600 "$key_file" "$known_hosts_file"
+
+          ssh \
+            -i "$key_file" \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=10 \
+            -o IdentitiesOnly=yes \
+            -o LogLevel=ERROR \
+            -o NumberOfPasswordPrompts=0 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts_file" \
+            -- "$SSH_USER@$SSH_HOST" \
+            release-v1 "$SERVICE_NAME" "$IMAGE" "$REVISION"

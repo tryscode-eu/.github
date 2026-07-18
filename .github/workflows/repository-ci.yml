@@ -1,0 +1,41 @@
+name: Organization workflow CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organization-workflows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Validate workflow syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Run pinned actionlint
+        run: >-
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo
+          rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          -color
+      - name: Enforce the bounded staging protocol
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          workflow=.github/workflows/staging-release.yml
+          grep -Fq "release-v1 \"\$SERVICE_NAME\" \"\$IMAGE\" \"\$REVISION\"" "$workflow"
+          grep -Fq 'StrictHostKeyChecking=yes' "$workflow"
+          grep -Fq 'environment: staging' "$workflow"
+          grep -Fq 'cancel-in-progress: false' "$workflow"
+          if grep -Eq 'kubectl|sudo|bash -c|sh -c|scp|rsync' "$workflow"; then
+            echo "The reusable workflow must not bypass the forced dispatcher." >&2
+            exit 1
+          fi
