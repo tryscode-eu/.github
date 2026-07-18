@@ -1,0 +1,85 @@
+name: Reusable CI - Web
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version understood by actions/setup-node.
+        required: false
+        type: string
+        default: "22"
+      working-directory:
+        description: Repository-relative application directory.
+        required: false
+        type: string
+        default: .
+      install-command:
+        description: Locked dependency installation command; leave empty to skip.
+        required: false
+        type: string
+        default: npm ci
+      lint-command:
+        description: Lint or syntax-check command; leave empty to skip.
+        required: false
+        type: string
+        default: npm run lint
+      test-command:
+        description: Test command; leave empty to skip.
+        required: false
+        type: string
+        default: npm test
+      build-command:
+        description: Build command; leave empty to skip.
+        required: false
+        type: string
+        default: npm run build
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Web quality, tests, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          check-latest: false
+
+      - name: Install locked dependencies
+        if: inputs.install-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.install-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Lint
+        if: inputs.lint-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.lint-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Run tests
+        if: inputs.test-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.test-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Build
+        if: inputs.build-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.build-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
