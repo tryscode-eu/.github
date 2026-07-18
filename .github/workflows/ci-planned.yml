@@ -1,0 +1,48 @@
+name: Reusable CI - Planned repository
+
+on:
+  workflow_call:
+    inputs:
+      required-files:
+        description: Newline-separated baseline files required in the repository root.
+        required: false
+        type: string
+        default: |-
+          README.md
+          LICENSE
+          .gitignore
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Planned repository baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate required files
+        shell: bash
+        env:
+          REQUIRED_FILES: ${{ inputs.required-files }}
+        run: |
+          set -Eeuo pipefail
+          missing=0
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+            if [[ "$path" = /* || "$path" == *".."* ]]; then
+              echo "Invalid required path: $path" >&2
+              exit 2
+            fi
+            if [[ ! -f "$path" ]]; then
+              echo "Missing required file: $path" >&2
+              missing=1
+            fi
+          done <<< "$REQUIRED_FILES"
+          exit "$missing"
+
+      - name: Check whitespace errors
+        run: git diff --check

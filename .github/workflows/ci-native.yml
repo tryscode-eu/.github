@@ -1,0 +1,73 @@
+name: Reusable CI - Native
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Repository-relative source directory.
+        required: false
+        type: string
+        default: .
+      format-command:
+        description: Formatting verification command; leave empty to skip.
+        required: false
+        type: string
+        default: ""
+      configure-command:
+        description: Configure command; leave empty for Make-only projects.
+        required: false
+        type: string
+        default: ""
+      build-command:
+        description: Compilation command.
+        required: false
+        type: string
+        default: make -j2
+      test-command:
+        description: Test command.
+        required: false
+        type: string
+        default: make test
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Native build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Check formatting
+        if: inputs.format-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.format-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Configure
+        if: inputs.configure-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.configure-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Compile
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.build-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Run tests
+        if: inputs.test-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.test-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"

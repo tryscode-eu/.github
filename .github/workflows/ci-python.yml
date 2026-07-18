@@ -1,0 +1,102 @@
+name: Reusable CI - Python
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version understood by actions/setup-python.
+        required: false
+        type: string
+        default: "3.12"
+      working-directory:
+        description: Repository-relative application directory.
+        required: false
+        type: string
+        default: .
+      install-command:
+        description: Locked dependency installation command.
+        required: false
+        type: string
+        default: python -m pip install --require-hashes -r requirements.lock
+      format-command:
+        description: Formatting verification command; leave empty to skip.
+        required: false
+        type: string
+        default: python -m ruff format --check .
+      lint-command:
+        description: Lint command; leave empty to skip.
+        required: false
+        type: string
+        default: python -m ruff check .
+      typecheck-command:
+        description: Type-check command; leave empty when not configured.
+        required: false
+        type: string
+        default: ""
+      test-command:
+        description: Test command.
+        required: false
+        type: string
+        default: python -m pytest
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Python quality and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          check-latest: false
+
+      - name: Install locked dependencies
+        if: inputs.install-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.install-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Check formatting
+        if: inputs.format-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.format-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Lint
+        if: inputs.lint-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.lint-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Compile Python sources
+        working-directory: ${{ inputs.working-directory }}
+        run: python -m compileall -q .
+
+      - name: Type-check
+        if: inputs.typecheck-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.typecheck-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
+
+      - name: Run tests
+        if: inputs.test-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.test-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"

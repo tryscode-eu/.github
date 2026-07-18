@@ -1,0 +1,76 @@
+name: Reusable CI - Content
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Repository-relative content directory.
+        required: false
+        type: string
+        default: .
+      require-readme:
+        description: Require README.md or README.rst at the working-directory root.
+        required: false
+        type: boolean
+        default: true
+      extra-validation-command:
+        description: Optional repository-specific validation command.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Content validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate content files
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          REQUIRE_README: ${{ inputs.require-readme }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "$REQUIRE_README" == "true" && ! -f README.md && ! -f README.rst ]]; then
+            echo "README.md or README.rst is required" >&2
+            exit 1
+          fi
+
+          while IFS= read -r -d '' file; do
+            python - "$file" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          with path.open(encoding="utf-8") as stream:
+              json.load(stream)
+          PY
+          done < <(find . -type f -name '*.json' -not -path './.git/*' -print0)
+
+          while IFS= read -r -d '' file; do
+            ruby -e 'require "yaml"; YAML.parse_file(ARGV.fetch(0))' "$file"
+          done < <(find . -type f \( -name '*.yaml' -o -name '*.yml' \) -not -path './.git/*' -print0)
+
+          if git grep -nI -E '[[:blank:]]+$' -- '*.md' '*.markdown' '*.json' '*.yaml' '*.yml'; then
+            echo "Trailing whitespace found" >&2
+            exit 1
+          fi
+
+          git diff --check
+
+      - name: Run repository-specific validation
+        if: inputs.extra-validation-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.extra-validation-command }}
+        run: bash -Eeuo pipefail -c "$COMMAND"
