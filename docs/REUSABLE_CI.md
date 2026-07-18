@@ -8,8 +8,15 @@ This repository provides a small common CI foundation for TrysCode repositories:
 - `ci-content.yml` validates JSON, YAML, whitespace, and optional repository-specific content checks;
 - `candidate-image.yml` builds a candidate on pull requests, then publishes the
   SHA-tagged image only for a push on the caller repository's default branch;
+- `staging-release.yml` validates an immutable image and, only behind an
+  explicit gate, invokes the bounded `release-v1` protocol through a dedicated
+  staging identity.
 
-All third-party actions are pinned to full commit SHAs. CI workflows receive only `contents: read`; only the candidate-image workflow receives `packages: write`. None of these workflows deploys a service or accepts a deployment secret.
+All third-party actions are pinned to full commit SHAs. CI workflows receive
+only `contents: read`; only the candidate-image workflow receives
+`packages: write`. The staging release is a separate, explicit boundary: its
+contract job needs no secret, and its deployment job can access only the
+caller's protected `staging` environment.
 
 Call a workflow from a lightweight repository workflow and pin the organization workflow to an immutable commit SHA:
 
@@ -23,3 +30,7 @@ jobs:
 ```
 
 Commands are supplied by the caller configuration and run with no staging or production secrets. Keep dependency installation locked and use the candidate image output only as an unpromoted deployment candidate.
+
+The release workflow is documented in [REUSABLE_CD.md](REUSABLE_CD.md). It does
+not make a repository `cd_ready`: the dedicated forced SSH identity, dispatcher,
+registry reachability, smoke test and rollback must be qualified first.
