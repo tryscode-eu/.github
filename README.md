@@ -107,4 +107,91 @@ Baptiste RENNESON BOUTARD / équipe plateforme TrysCode.
 ## Limitations
 
 Ce dépôt décrit l'organisation et ses workflows partagés. Il ne prouve pas à lui
-seul qu'un service applicatif est construit, déployé ou vérifié.
+seul qu'un service applicatif est construit, publié ou vérifié.
+
+<!-- TRYS_REPOSITORY_DOCS:BEGIN -->
+# .github
+
+> Bloc généré depuis `repositories.yaml`. Les champs non prouvés restent volontairement marqués.
+
+## Rôle
+
+Profil, métadonnées publiques et fondation CI réutilisable de l'organisation GitHub.
+
+## Responsabilités
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Hors périmètre
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Architecture
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Prérequis
+
+control, full
+
+## Installation
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Configuration
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Variables d'environnement
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Commandes
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Tests
+
+declared
+
+## API et messages
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Sécurité
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Observabilité
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Déploiement
+
+ci_ready
+
+## Migrations
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Dépannage
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Contribution
+
+TO_COMPLETE_WHEN_VERIFIED
+
+## Licence et statut
+
+missing
+
+## Propriétaire
+
+tryscode-eu
+
+## Limitations
+
+TO_COMPLETE_WHEN_VERIFIED
+
+<!-- TRYS_REPOSITORY_DOCS:END -->
